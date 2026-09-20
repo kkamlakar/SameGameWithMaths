@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Chalk Sums</title>
+<style>
+  :root{
+    --board-bg:#1c2b23; --panel-bg:#223529; --chalk:#eae6da; --chalk-dim:#9fae9f;
+    --accent:#e2683f; --good:#7fb89a; --bad:#d9707a;
+    --c1:#e8c468; --c2:#6fa8c9; --c3:#d98ba6; --c4:#d98653; --c5:#7fb89a; --c6:#b79fd9;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; padding:0; height:100%; background:#10180f; color:var(--chalk);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    overscroll-behavior:none; user-select:none; }
+  #app{ max-width:680px; margin:0 auto; min-height:100%; display:flex; flex-direction:column; padding:14px 14px 28px; }
+
+  header{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px; }
+  header h1{ font-size:22px; margin:0; letter-spacing:0.2px; font-weight:700; }
+  header h1 span{ color:var(--chalk-dim); font-weight:400; }
+  .stat-row{ display:flex; gap:16px; font-size:13px; color:var(--chalk-dim); }
+  .stat-row b{ color:var(--chalk); font-variant-numeric:tabular-nums; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+
+  .hero{ display:flex; align-items:center; justify-content:center; gap:22px; padding:14px 0 10px; }
+  .target-wrap{ position:relative; width:96px; height:96px; flex-shrink:0; }
+  .target-wrap svg{ position:absolute; inset:0; }
+  .target-wrap .num{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:34px; font-weight:700; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--accent); }
+  .target-label{ font-size:11px; color:var(--chalk-dim); text-align:center; margin-top:2px; letter-spacing:0.4px; }
+  .selection-box{ min-width:150px; }
+  .selection-line{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:20px; min-height:26px;
+    color:var(--chalk); transition:color .15s ease; }
+  .selection-line.good{ color:var(--good); }
+  .selection-line.bad{ color:var(--bad); }
+  .selection-hint{ font-size:12px; color:var(--chalk-dim); margin-top:4px; min-height:14px; }
+
+  .board-shell{ display:flex; justify-content:center; margin:6px 0 14px; }
+  #board{ position:relative; background:var(--board-bg); border-radius:10px; border:1px solid #2c3f32;
+    box-shadow:inset 0 0 40px rgba(0,0,0,0.25); overflow:hidden; }
+  .brick{ position:absolute; display:flex; align-items:center; justify-content:center;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-weight:600; border-radius:6px; cursor:pointer;
+    transition: top .22s cubic-bezier(.4,0,.2,1), left .22s cubic-bezier(.4,0,.2,1),
+                transform .12s ease, opacity .18s ease, box-shadow .12s ease;
+    color:rgba(0,0,0,0.62); }
+  .brick.no-anim{ transition:none !important; }
+  .brick.in-group{ box-shadow:0 0 0 2px rgba(234,230,218,0.55) inset; }
+  .brick.selected{ transform:scale(0.86); box-shadow:0 0 0 2px var(--chalk) inset, 0 0 10px rgba(234,230,218,0.5); }
+  .brick.removing{ transform:scale(0.3); opacity:0; }
+  .brick.shake{ animation:shake .28s ease; }
+  .brick.hinted{ animation:hintPulse .7s ease 4; z-index:5; }
+  @keyframes shake{ 0%,100%{transform:translateX(0);} 25%{transform:translateX(-4px);} 75%{transform:translateX(4px);} }
+  @keyframes hintPulse{
+    0%,100%{ box-shadow:0 0 0 0 rgba(226,104,63,0); transform:scale(1); }
+    50%{ box-shadow:0 0 0 3px var(--accent), 0 0 14px var(--accent); transform:scale(1.08); }
+  }
+
+  .c1{background:var(--c1);} .c2{background:var(--c2);} .c3{background:var(--c3);}
+  .c4{background:var(--c4);} .c5{background:var(--c5);} .c6{background:var(--c6);}
+
+  .toolbar{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  button.ghost{ background:transparent; border:1px solid #3a4f41; color:var(--chalk); padding:9px 16px;
+    border-radius:999px; font-size:13px; cursor:pointer; transition:border-color .15s ease; }
+  button.ghost:hover:not(:disabled){ border-color:var(--accent); }
+  button.ghost:disabled{ opacity:0.32; cursor:default; }
+  button.lifeline{ border-color:#5a4433; }
+  button.lifeline:hover:not(:disabled){ border-color:var(--accent); }
+  button.lifeline .pips{ color:var(--accent); font-weight:700; margin-left:5px; font-family:ui-monospace,monospace; }
+  button.primary{ background:var(--accent); border:none; color:#1c1208; font-weight:700; padding:11px 22px;
+    border-radius:999px; font-size:14px; cursor:pointer; }
+
+  #toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); background:#2c3f32;
+    color:var(--chalk); padding:10px 18px; border-radius:8px; font-size:13px; opacity:0;
+    transition:opacity .2s ease, transform .2s ease; pointer-events:none; z-index:50; max-width:86%;
+    text-align:center; border:1px solid #3a4f41; }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  .overlay{ position:fixed; inset:0; background:rgba(8,12,8,0.72); display:flex; align-items:center;
+    justify-content:center; z-index:100; padding:20px; }
+  .modal{ background:var(--panel-bg); border:1px solid #345140; border-radius:14px; padding:24px;
+    max-width:380px; width:100%; max-height:88vh; overflow-y:auto; }
+  .modal h2{ margin:0 0 4px; font-size:20px; }
+  .modal p.sub{ color:var(--chalk-dim); font-size:13px; margin:0 0 18px; }
+  .field{ margin-bottom:16px; }
+  .field label.title{ display:block; font-size:12px; color:var(--chalk-dim); margin-bottom:8px; letter-spacing:0.3px; }
+  .seg{ display:flex; gap:6px; }
+  .seg button{ flex:1; padding:9px 4px; border-radius:8px; border:1px solid #3a4f41; background:transparent;
+    color:var(--chalk); font-size:13px; cursor:pointer; }
+  .seg button.active{ background:var(--accent); border-color:var(--accent); color:#1c1208; font-weight:700; }
+  .check-row{ display:flex; align-items:center; gap:10px; padding:7px 0; font-size:14px; }
+  .check-row input{ width:17px; height:17px; accent-color:var(--accent); }
+  .modal .actions{ margin-top:20px; display:flex; justify-content:flex-end; gap:10px; }
+  .final-score{ text-align:center; margin:6px 0 20px; }
+  .final-score .num{ font-size:44px; font-weight:800; font-family:ui-monospace,monospace; color:var(--accent); }
+  .final-score .lbl{ font-size:13px; color:var(--chalk-dim); }
+  .final-score .best{ margin-top:6px; font-size:13px; color:var(--good); }
+
+  @media (max-width:380px){
+    .hero{ gap:12px; }
+    .target-wrap{ width:82px; height:82px; }
+    .target-wrap .num{ font-size:28px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Chalk Sums <span>· math same-game</span></h1>
+    <div class="stat-row">
+      <div>Score <b id="scoreVal">0</b></div>
+      <div>Best <b id="bestVal">0</b></div>
+      <div id="timerRow" style="display:none;">Time <b id="timerVal">3:00</b></div>
+    </div>
+  </header>
+
+  <div class="hero">
+    <div>
+      <div class="target-wrap">
+        <svg viewBox="0 0 100 100"><ellipse cx="50" cy="50" rx="44" ry="40" fill="none" stroke="#eae6da" stroke-width="3" stroke-linecap="round" transform="rotate(-6 50 50)"/></svg>
+        <div class="num" id="targetVal">--</div>
+      </div>
+      <div class="target-label">TARGET</div>
+    </div>
+    <div class="selection-box">
+      <div class="selection-line" id="selLine">tap a group of tiles</div>
+      <div class="selection-hint" id="selHint"></div>
+    </div>
+  </div>
+
+  <div class="board-shell">
+    <div id="board"></div>
+  </div>
+
+  <div class="toolbar">
+    <button class="ghost lifeline" id="btnHint">Hint<span class="pips" id="hintPips">3</span></button>
+    <button class="ghost lifeline" id="btnSkip">Skip target<span class="pips" id="skipPips">3</span></button>
+    <button class="ghost" id="btnUndo">Undo</button>
+    <button class="ghost" id="btnNew">New game</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div class="overlay" id="startOverlay">
+  <div class="modal">
+    <h2>Chalk Sums</h2>
+    <p class="sub">Tap a group of same-color tiles, then tap tiles inside it to make the target number. Clear the board.</p>
+
+    <div class="field">
+      <label class="title">Difficulty</label>
+      <div class="seg" id="segDifficulty">
+        <button data-v="easy">Easy</button>
+        <button data-v="medium" class="active">Medium</button>
+        <button data-v="hard">Hard</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="title">Ways to make the target</label>
+      <label class="check-row"><input type="checkbox" id="opSum" checked> Sum (a + b = target)</label>
+      <label class="check-row"><input type="checkbox" id="opProduct"> Product (a × b = target)</label>
+      <label class="check-row"><input type="checkbox" id="opDiff"> Difference of 2 tiles (|a − b| = target)</label>
+    </div>
+
+    <div class="field">
+      <label class="title">Lifelines per game</label>
+      <div class="seg" id="segLifelines">
+        <button data-v="1">1 each</button>
+        <button data-v="3" class="active">3 each</button>
+        <button data-v="99">Unlimited</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="check-row"><input type="checkbox" id="opTimed"> Timed mode (3:00)</label>
+    </div>
+
+    <div class="actions">
+      <button class="primary" id="btnStart">Start game</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="endOverlay" style="display:none;">
+  <div class="modal">
+    <h2 id="endTitle">Board cleared!</h2>
+    <p class="sub" id="endSub">Nice work.</p>
+    <div class="final-score">
+      <div class="num" id="endScore">0</div>
+      <div class="lbl">final score</div>
+      <div class="best" id="endBest"></div>
+    </div>
+    <div class="actions">
+      <button class="primary" id="btnPlayAgain">Play again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var ROWS = 10, COLS = 12;
+  var PALETTE = ["c1","c2","c3","c4","c5","c6"];
+  var DIFF = {
+    easy:   { colors:4, numMin:1, numMax:9,  targetMin:6,  targetMax:16 },
+    medium: { colors:5, numMin:1, numMax:12, targetMin:8,  targetMax:26 },
+    hard:   { colors:6, numMin:1, numMax:20, targetMin:14, targetMax:40 }
+  };
+  var SUM_CAP = 120; // upper bound for subset-sum DP
+
+  var el = {
+    board: document.getElementById('board'),
+    scoreVal: document.getElementById('scoreVal'),
+    bestVal: document.getElementById('bestVal'),
+    timerRow: document.getElementById('timerRow'),
+    timerVal: document.getElementById('timerVal'),
+    targetVal: document.getElementById('targetVal'),
+    selLine: document.getElementById('selLine'),
+    selHint: document.getElementById('selHint'),
+    btnHint: document.getElementById('btnHint'),
+    btnSkip: document.getElementById('btnSkip'),
+    hintPips: document.getElementById('hintPips'),
+    skipPips: document.getElementById('skipPips'),
+    btnNew: document.getElementById('btnNew'),
+    btnUndo: document.getElementById('btnUndo'),
+    startOverlay: document.getElementById('startOverlay'),
+    endOverlay: document.getElementById('endOverlay'),
+    endTitle: document.getElementById('endTitle'),
+    endSub: document.getElementById('endSub'),
+    endScore: document.getElementById('endScore'),
+    endBest: document.getElementById('endBest'),
+    btnStart: document.getElementById('btnStart'),
+    btnPlayAgain: document.getElementById('btnPlayAgain'),
+    segDifficulty: document.getElementById('segDifficulty'),
+    segLifelines: document.getElementById('segLifelines'),
+    opSum: document.getElementById('opSum'),
+    opProduct: document.getElementById('opProduct'),
+    opDiff: document.getElementById('opDiff'),
+    opTimed: document.getElementById('opTimed'),
+    toast: document.getElementById('toast')
+  };
+
+  var cellSize = 30;
+  var nextId = 1;
+  var dom = new Map();
+
+  var S = {
+    difficulty: 'medium',
+    ops: { sum:true, product:false, difference:false },
+    timed: false,
+    lifelineCount: 3,
+    hintsLeft: 3,
+    skipsLeft: 3,
+    board: null,
+    score: 0,
+    best: parseInt(localStorage.getItem('chalkSumsBest') || '0', 10),
+    target: 0,
+    activeGroup: null,
+    selection: null,
+    undoStack: [],
+    timeLeft: 180,
+    timerHandle: null,
+    over: false
+  };
+
+  el.bestVal.textContent = S.best;
+
+  function rnd(min, max){ return Math.floor(Math.random() * (max - min + 1)) + min; }
+  function key(r,c){ return r + ',' + c; }
+  function parseKey(k){ var p = k.split(','); return [parseInt(p[0],10), parseInt(p[1],10)]; }
+  function cloneBoard(b){
+    return b.map(function(row){ return row.map(function(cell){ return cell ? { id:cell.id, color:cell.color, value:cell.value } : null; }); });
+  }
+  function showToast(msg){
+    el.toast.textContent = msg;
+    el.toast.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(function(){ el.toast.classList.remove('show'); }, 2000);
+  }
+
+  function newBoard(){
+    var cfg = DIFF[S.difficulty];
+    var b = [];
+    for (var r = 0; r < ROWS; r++){
+      var row = [];
+      for (var c = 0; c < COLS; c++){
+        row.push({ id: nextId++, color: PALETTE[rnd(0, cfg.colors - 1)], value: rnd(cfg.numMin, cfg.numMax) });
+      }
+      b.push(row);
+    }
+    return b;
+  }
+
+  function computeCellSize(){
+    var maxWidth = Math.min(window.innerWidth - 28, 680);
+    var maxHeight = Math.floor(window.innerHeight * 0.55);
+    var byWidth = Math.floor(maxWidth / COLS);
+    var byHeight = Math.floor(maxHeight / ROWS);
+    cellSize = Math.max(18, Math.min(byWidth, byHeight, 42));
+    el.board.style.width = (cellSize * COLS) + 'px';
+    el.board.style.height = (cellSize * ROWS) + 'px';
+  }
+
+  function renderFull(){
+    dom.forEach(function(node){ node.remove(); });
+    dom.clear();
+    for (var r = 0; r < ROWS; r++){
+      for (var c = 0; c < COLS; c++){
+        var cell = S.board[r][c];
+        if (!cell) continue;
+        createBrickNode(cell, r, c, true);
+      }
+    }
+  }
+
+  function createBrickNode(cell, r, c, noAnim){
+    var node = document.createElement('div');
+    node.className = 'brick ' + cell.color + (noAnim ? ' no-anim' : '');
+    node.style.width = cellSize + 'px';
+    node.style.height = cellSize + 'px';
+    node.style.top = (r * cellSize) + 'px';
+    node.style.left = (c * cellSize) + 'px';
+    node.style.fontSize = Math.max(11, Math.floor(cellSize * 0.42)) + 'px';
+    node.textContent = cell.value;
+    node.dataset.row = r;
+    node.dataset.col = c;
+    node.dataset.id = cell.id;
+    node.addEventListener('click', onBrickClick);
+    el.board.appendChild(node);
+    dom.set(cell.id, node);
+    if (noAnim){ requestAnimationFrame(function(){ node.classList.remove('no-anim'); }); }
+    return node;
+  }
+
+  function syncBoard(){
+    var seenIds = new Set();
+    for (var r = 0; r < ROWS; r++){
+      for (var c = 0; c < COLS; c++){
+        var cell = S.board[r][c];
+        if (!cell) continue;
+        seenIds.add(cell.id);
+        var node = dom.get(cell.id);
+        if (!node){ node = createBrickNode(cell, r, c, false); }
+        else {
+          node.style.top = (r * cellSize) + 'px';
+          node.style.left = (c * cellSize) + 'px';
+          node.dataset.row = r;
+          node.dataset.col = c;
+        }
+      }
+    }
+    dom.forEach(function(node, id){
+      if (!seenIds.has(id)){ node.remove(); dom.delete(id); }
+    });
+    updateHighlights();
+  }
+
+  function updateHighlights(){
+    dom.forEach(function(node){
+      var r = parseInt(node.dataset.row, 10), c = parseInt(node.dataset.col, 10);
+      var k = key(r, c);
+      node.classList.toggle('in-group', !!(S.activeGroup && S.activeGroup.has(k)));
+      node.classList.toggle('selected', !!(S.selection && S.selection.has(k)));
+    });
+  }
+
+  function animateRemoval(keys, cb){
+    if (keys.length === 0){ cb(); return; }
+    keys.forEach(function(k){
+      var pos = parseKey(k);
+      var cell = S.board[pos[0]][pos[1]];
+      if (!cell) return;
+      var node = dom.get(cell.id);
+      if (node) node.classList.add('removing');
+    });
+    setTimeout(cb, 200);
+  }
+
+  function shakeCell(r, c){
+    var cell = S.board[r][c];
+    if (!cell) return;
+    var node = dom.get(cell.id);
+    if (!node) return;
+    node.classList.add('shake');
+    setTimeout(function(){ node.classList.remove('shake'); }, 300);
+  }
+
+  function getConnectedGroup(r, c){
+    var color = S.board[r][c].color;
+    var group = new Set([key(r, c)]);
+    var stack = [[r, c]];
+    while (stack.length){
+      var cur = stack.pop();
+      var dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+      for (var i = 0; i < dirs.length; i++){
+        var nr = cur[0] + dirs[i][0], nc = cur[1] + dirs[i][1];
+        if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
+        var ncell = S.board[nr][nc];
+        if (!ncell || ncell.color !== color) continue;
+        var nk = key(nr, nc);
+        if (group.has(nk)) continue;
+        group.add(nk);
+        stack.push([nr, nc]);
+      }
+    }
+    return group;
+  }
+
+  function allGroups(){
+    var seen = new Set(), out = [];
+    for (var r = 0; r < ROWS; r++){
+      for (var c = 0; c < COLS; c++){
+        if (!S.board[r][c]) continue;
+        var k = key(r,c);
+        if (seen.has(k)) continue;
+        var g = getConnectedGroup(r, c);
+        g.forEach(function(gk){ seen.add(gk); });
+        if (g.size >= 2) out.push(g);
+      }
+    }
+    return out;
+  }
+
+  function groupKeysArr(g){ return Array.from(g); }
+  function valuesOfKeys(keysArr){
+    return keysArr.map(function(k){ var p = parseKey(k); return S.board[p[0]][p[1]].value; });
+  }
+
+  // Subset-sum with a witness, requiring at least 2 elements.
+  // dp[cnt] where cnt is 0,1,2 (2 means "two or more"): Map sum -> array of indices.
+  function subsetSumWitness(values, target){
+    if (target < 0 || target > SUM_CAP) return null;
+    var dp = [new Map(), new Map(), new Map()];
+    dp[0].set(0, []);
+    for (var i = 0; i < values.length; i++){
+      var v = values[i];
+      var snapshot = [];
+      for (var cnt = 0; cnt < 3; cnt++){
+        dp[cnt].forEach(function(idxs, s){ snapshot.push([cnt, s, idxs]); });
+      }
+      for (var j = 0; j < snapshot.length; j++){
+        var cnt2 = snapshot[j][0], s2 = snapshot[j][1], idxs2 = snapshot[j][2];
+        var ns = s2 + v;
+        if (ns > SUM_CAP) continue;
+        var ncnt = Math.min(cnt2 + 1, 2);
+        if (!dp[ncnt].has(ns)) dp[ncnt].set(ns, idxs2.concat([i]));
+      }
+    }
+    return dp[2].has(target) ? dp[2].get(target) : null;
+  }
+
+  // Every number this group could legally produce, given enabled operations.
+  function groupCandidates(values){
+    var out = new Set();
+    if (S.ops.sum){
+      var dp = [new Map(), new Map(), new Map()];
+      dp[0].set(0, []);
+      for (var i = 0; i < values.length; i++){
+        var v = values[i];
+        var snap = [];
+        for (var cnt = 0; cnt < 3; cnt++){ dp[cnt].forEach(function(idxs, s){ snap.push([cnt, s, idxs]); }); }
+        for (var j = 0; j < snap.length; j++){
+          var ns = snap[j][1] + v;
+          if (ns > SUM_CAP) continue;
+          var ncnt = Math.min(snap[j][0] + 1, 2);
+          if (!dp[ncnt].has(ns)) dp[ncnt].set(ns, snap[j][2].concat([i]));
+        }
+      }
+      dp[2].forEach(function(_, s){ out.add(s); });
+    }
+    if (S.ops.product){
+      for (var a = 0; a < values.length; a++){
+        for (var b = a + 1; b < values.length; b++){
+          var p = values[a] * values[b];
+          if (p <= SUM_CAP) out.add(p);
+        }
+      }
+    }
+    if (S.ops.difference){
+      for (var a2 = 0; a2 < values.length; a2++){
+        for (var b2 = a2 + 1; b2 < values.length; b2++){
+          out.add(Math.abs(values[a2] - values[b2]));
+        }
+      }
+    }
+    return out;
+  }
+
+  // Collect every target achievable somewhere on the board right now.
+  function achievableTargets(){
+    var groups = allGroups();
+    var all = new Set();
+    for (var i = 0; i < groups.length; i++){
+      var keysArr = groupKeysArr(groups[i]);
+      groupCandidates(valuesOfKeys(keysArr)).forEach(function(v){ all.add(v); });
+    }
+    return all;
+  }
+
+  // Find a concrete playable move for the CURRENT target: returns array of keys.
+  function findHintKeys(){
+    var groups = allGroups();
+    for (var i = 0; i < groups.length; i++){
+      var keysArr = groupKeysArr(groups[i]);
+      var values = valuesOfKeys(keysArr);
+      if (S.ops.sum){
+        var w = subsetSumWitness(values, S.target);
+        if (w) return w.map(function(idx){ return keysArr[idx]; });
+      }
+      for (var a = 0; a < values.length; a++){
+        for (var b = a + 1; b < values.length; b++){
+          if (S.ops.product && values[a] * values[b] === S.target) return [keysArr[a], keysArr[b]];
+          if (S.ops.difference && Math.abs(values[a] - values[b]) === S.target) return [keysArr[a], keysArr[b]];
+        }
+      }
+    }
+    return null;
+  }
+
+  // Roll a target that is GUARANTEED to be reachable on the current board.
+  function rollTarget(){
+    var cfg = DIFF[S.difficulty];
+    var reach = achievableTargets();
+    if (reach.size === 0){ return false; }
+    var inRange = [];
+    reach.forEach(function(v){ if (v >= cfg.targetMin && v <= cfg.targetMax) inRange.push(v); });
+    var pool = inRange.length ? inRange : Array.from(reach).filter(function(v){ return v >= 2; });
+    if (pool.length === 0) pool = Array.from(reach);
+    var pick = pool[rnd(0, pool.length - 1)];
+    // avoid repeating the same target twice in a row when we have options
+    if (pool.length > 1 && pick === S.target){
+      pick = pool[(pool.indexOf(pick) + 1) % pool.length];
+    }
+    S.target = pick;
+    el.targetVal.textContent = S.target;
+    return true;
+  }
+
+  function selectionValues(){
+    return valuesOfKeys(Array.from(S.selection));
+  }
+
+  function checkExactMatch(values){
+    if (values.length < 2) return false;
+    if (S.ops.sum){
+      var s = values.reduce(function(a,b){ return a+b; }, 0);
+      if (s === S.target) return true;
+    }
+    if (S.ops.product){
+      var p = values.reduce(function(a,b){ return a*b; }, 1);
+      if (p === S.target) return true;
+    }
+    if (S.ops.difference && values.length === 2){
+      if (Math.abs(values[0] - values[1]) === S.target) return true;
+    }
+    return false;
+  }
+
+  function updateSelectionLine(){
+    if (!S.activeGroup){
+      el.selLine.textContent = 'tap a group of tiles';
+      el.selLine.className = 'selection-line';
+      el.selHint.textContent = '';
+      return;
+    }
+    if (!S.selection || S.selection.size === 0){
+      el.selLine.textContent = 'tap tiles in the highlighted group';
+      el.selLine.className = 'selection-line';
+      el.selHint.textContent = '';
+      return;
+    }
+    var vals = selectionValues();
+    var sum = vals.reduce(function(a,b){ return a+b; }, 0);
+    el.selLine.textContent = vals.join(' + ') + ' = ' + sum;
+    el.selLine.className = 'selection-line';
+    el.selHint.textContent = (S.target - sum > 0) ? ('need ' + (S.target - sum) + ' more') : '';
+  }
+
+  function clearActiveSelection(){
+    S.activeGroup = null;
+    S.selection = null;
+    updateHighlights();
+    updateSelectionLine();
+  }
+
+  function onBrickClick(e){
+    if (S.over) return;
+    var node = e.currentTarget;
+    var r = parseInt(node.dataset.row, 10), c = parseInt(node.dataset.col, 10);
+    var cell = S.board[r][c];
+    if (!cell) return;
+    var k = key(r, c);
+
+    if (!S.activeGroup || !S.activeGroup.has(k)){
+      var group = getConnectedGroup(r, c);
+      if (group.size < 2){ shakeCell(r, c); return; }
+      S.activeGroup = group;
+      S.selection = new Set([k]);
+    } else {
+      if (S.selection.has(k)) S.selection.delete(k);
+      else S.selection.add(k);
+    }
+    updateHighlights();
+    updateSelectionLine();
+    evaluateSelection();
+  }
+
+  function evaluateSelection(){
+    if (!S.selection || S.selection.size === 0) return;
+    var keys = Array.from(S.selection);
+    var values = selectionValues();
+
+    if (checkExactMatch(values)){ doMatch(keys); return; }
+
+    var sumOnly = S.ops.sum && !S.ops.product && !S.ops.difference;
+    if (sumOnly){
+      var sum = values.reduce(function(a,b){ return a+b; }, 0);
+      if (sum > S.target){
+        el.selLine.classList.add('bad');
+        el.selHint.textContent = 'over by ' + (sum - S.target);
+        setTimeout(function(){
+          S.selection = new Set();
+          updateHighlights();
+          updateSelectionLine();
+        }, 420);
+      }
+    }
+  }
+
+  function doMatch(keys){
+    pushUndo();
+    var gain = keys.length * 10 + S.target;
+    S.score += gain;
+    el.scoreVal.textContent = S.score;
+    showToast('+' + gain);
+
+    animateRemoval(keys, function(){
+      keys.forEach(function(k){
+        var pos = parseKey(k);
+        S.board[pos[0]][pos[1]] = null;
+      });
+      applyGravityAndShift();
+      clearActiveSelection();
+      computeCellSize();
+      syncBoard();
+
+      if (!rollTarget()){ endGame(boardTileCount() === 0); }
+    });
+  }
+
+  function boardTileCount(){
+    var n = 0;
+    for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) if (S.board[r][c]) n++;
+    return n;
+  }
+
+  function applyGravityAndShift(){
+    for (var c = 0; c < COLS; c++){
+      var stackVals = [];
+      for (var r = 0; r < ROWS; r++){ if (S.board[r][c]) stackVals.push(S.board[r][c]); }
+      for (var r2 = ROWS - 1, i = stackVals.length - 1; r2 >= 0; r2--, i--){
+        S.board[r2][c] = i >= 0 ? stackVals[i] : null;
+      }
+    }
+    var nonEmptyCols = [];
+    for (var c2 = 0; c2 < COLS; c2++){
+      var hasBrick = false;
+      for (var r3 = 0; r3 < ROWS; r3++){ if (S.board[r3][c2]){ hasBrick = true; break; } }
+      if (hasBrick) nonEmptyCols.push(c2);
+    }
+    var nb = [];
+    for (var r4 = 0; r4 < ROWS; r4++) nb.push(new Array(COLS).fill(null));
+    for (var newC = 0; newC < nonEmptyCols.length; newC++){
+      var oldC = nonEmptyCols[newC];
+      for (var r5 = 0; r5 < ROWS; r5++){ nb[r5][newC] = S.board[r5][oldC]; }
+    }
+    S.board = nb;
+  }
+
+  // ---------------- lifelines ----------------
+  function updatePips(){
+    var unlimited = S.lifelineCount >= 99;
+    el.hintPips.textContent = unlimited ? '∞' : S.hintsLeft;
+    el.skipPips.textContent = unlimited ? '∞' : S.skipsLeft;
+    el.btnHint.disabled = !unlimited && S.hintsLeft <= 0;
+    el.btnSkip.disabled = !unlimited && S.skipsLeft <= 0;
+  }
+
+  function useHint(){
+    if (S.over) return;
+    var unlimited = S.lifelineCount >= 99;
+    if (!unlimited && S.hintsLeft <= 0) return;
+    var keys = findHintKeys();
+    if (!keys){
+      showToast('No move exists for ' + S.target + ' — rolling a new target (free).');
+      if (!rollTarget()) endGame(boardTileCount() === 0);
+      return;
+    }
+    if (!unlimited){ S.hintsLeft--; updatePips(); }
+    var vals = valuesOfKeys(keys);
+    keys.forEach(function(k){
+      var pos = parseKey(k);
+      var cell = S.board[pos[0]][pos[1]];
+      if (!cell) return;
+      var node = dom.get(cell.id);
+      if (!node) return;
+      node.classList.add('hinted');
+      setTimeout(function(){ node.classList.remove('hinted'); }, 2900);
+    });
+    showToast(vals.join(' + ') + ' = ' + S.target);
+  }
+
+  function useSkip(){
+    if (S.over) return;
+    var unlimited = S.lifelineCount >= 99;
+    if (!unlimited && S.skipsLeft <= 0) return;
+    var before = S.target;
+    if (!rollTarget()){ endGame(boardTileCount() === 0); return; }
+    if (!unlimited){ S.skipsLeft--; updatePips(); }
+    clearActiveSelection();
+    showToast('Skipped ' + before + ' → new target ' + S.target);
+  }
+
+  // ---------------- undo ----------------
+  function pushUndo(){
+    S.undoStack.push({ board: cloneBoard(S.board), score: S.score, target: S.target,
+                       hintsLeft: S.hintsLeft, skipsLeft: S.skipsLeft });
+    if (S.undoStack.length > 15) S.undoStack.shift();
+    el.btnUndo.disabled = false;
+  }
+
+  function undo(){
+    if (!S.undoStack.length) return;
+    var snap = S.undoStack.pop();
+    S.board = snap.board;
+    S.score = snap.score;
+    S.target = snap.target;
+    S.hintsLeft = snap.hintsLeft;
+    S.skipsLeft = snap.skipsLeft;
+    el.scoreVal.textContent = S.score;
+    el.targetVal.textContent = S.target;
+    updatePips();
+    clearActiveSelection();
+    computeCellSize();
+    renderFull();
+    el.btnUndo.disabled = S.undoStack.length === 0;
+  }
+
+  // ---------------- timer ----------------
+  function startTimer(){
+    S.timeLeft = 180;
+    updateTimerLabel();
+    el.timerRow.style.display = '';
+    clearInterval(S.timerHandle);
+    S.timerHandle = setInterval(function(){
+      S.timeLeft--;
+      updateTimerLabel();
+      if (S.timeLeft <= 0){ clearInterval(S.timerHandle); endGame(false, true); }
+    }, 1000);
+  }
+  function updateTimerLabel(){
+    var m = Math.floor(S.timeLeft / 60), s = S.timeLeft % 60;
+    el.timerVal.textContent = m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function endGame(cleared, timeUp){
+    S.over = true;
+    clearInterval(S.timerHandle);
+    var beat = S.score > S.best;
+    if (beat){ S.best = S.score; localStorage.setItem('chalkSumsBest', String(S.best)); }
+    el.bestVal.textContent = S.best;
+    el.endTitle.textContent = cleared ? 'Board cleared!' : (timeUp ? "Time's up" : 'No moves left');
+    el.endSub.textContent = cleared ? 'You cleared every tile.' : 'Here is how you did.';
+    el.endScore.textContent = S.score;
+    el.endBest.textContent = beat ? 'New best score!' : ('Best: ' + S.best);
+    el.endOverlay.style.display = 'flex';
+  }
+
+  function readSettingsFromModal(){
+    S.ops.sum = el.opSum.checked;
+    S.ops.product = el.opProduct.checked;
+    S.ops.difference = el.opDiff.checked;
+    if (!S.ops.sum && !S.ops.product && !S.ops.difference){ S.ops.sum = true; el.opSum.checked = true; }
+    S.timed = el.opTimed.checked;
+  }
+
+  function startGame(){
+    readSettingsFromModal();
+    S.score = 0;
+    S.over = false;
+    S.undoStack = [];
+    S.hintsLeft = S.lifelineCount;
+    S.skipsLeft = S.lifelineCount;
+    el.scoreVal.textContent = '0';
+    el.btnUndo.disabled = true;
+    S.board = newBoard();
+    clearActiveSelection();
+    computeCellSize();
+    renderFull();
+    updatePips();
+    if (!rollTarget()){ endGame(false); return; }
+    el.startOverlay.style.display = 'none';
+    el.endOverlay.style.display = 'none';
+    if (S.timed) startTimer();
+    else { clearInterval(S.timerHandle); el.timerRow.style.display = 'none'; }
+  }
+
+  el.segDifficulty.addEventListener('click', function(e){
+    var btn = e.target.closest('button');
+    if (!btn) return;
+    Array.from(el.segDifficulty.children).forEach(function(b){ b.classList.remove('active'); });
+    btn.classList.add('active');
+    S.difficulty = btn.dataset.v;
+  });
+
+  el.segLifelines.addEventListener('click', function(e){
+    var btn = e.target.closest('button');
+    if (!btn) return;
+    Array.from(el.segLifelines.children).forEach(function(b){ b.classList.remove('active'); });
+    btn.classList.add('active');
+    S.lifelineCount = parseInt(btn.dataset.v, 10);
+  });
+
+  el.btnStart.addEventListener('click', startGame);
+  el.btnPlayAgain.addEventListener('click', function(){
+    el.endOverlay.style.display = 'none';
+    el.startOverlay.style.display = 'flex';
+  });
+  el.btnNew.addEventListener('click', function(){ el.startOverlay.style.display = 'flex'; });
+  el.btnUndo.addEventListener('click', undo);
+  el.btnHint.addEventListener('click', useHint);
+  el.btnSkip.addEventListener('click', useSkip);
+
+  window.addEventListener('keydown', function(e){
+    if (e.key === 'h' || e.key === 'H') useHint();
+    if (e.key === 's' || e.key === 'S') useSkip();
+    if (e.key === 'u' || e.key === 'U') undo();
+  });
+
+  window.addEventListener('resize', function(){ computeCellSize(); syncBoard(); });
+
+  S.board = newBoard();
+  computeCellSize();
+  renderFull();
+  updatePips();
+  el.btnUndo.disabled = true;
+})();
+</script>
+</body>
+</html>
